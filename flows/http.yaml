@@ -1,0 +1,6 @@
+nodes:
+  - id: http_start
+    type: http_trigger
+    config:
+      path: /start
+      start_node: start

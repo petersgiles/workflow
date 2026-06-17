@@ -1,0 +1,16 @@
+id: branch-flow
+start_node: check
+nodes:
+  - id: check
+    type: branch
+    config:
+      expr: "payload.status == ok"
+    transitions:
+      true: success
+      false: fail
+  - id: success
+    type: noop
+    config: {}
+  - id: fail
+    type: noop
+    config: {}

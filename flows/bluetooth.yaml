@@ -1,0 +1,14 @@
+id: bluetooth-flow
+start_node: scan
+nodes:
+  - id: scan
+    type: bluetooth
+    config:
+      timeout_seconds: 8
+  - id: find
+    type: find_device
+    config:
+      name: "BLE Harness"
+  - id: show
+    type: console
+    config: {}

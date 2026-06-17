@@ -1,0 +1,14 @@
+id: example-build
+start_node: start
+nodes:
+  - id: start
+    type: noop
+    config: {}
+  - id: step1
+    type: noop
+    config:
+      note: "first noop after start"
+  - id: step2
+    type: noop
+    config:
+      note: "second noop"

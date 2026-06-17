@@ -1,0 +1,7 @@
+id: script-flow
+start_node: run_tests
+nodes:
+  - id: run_tests
+    type: run_script
+    config:
+      cmd: ./flows/tests.sh
