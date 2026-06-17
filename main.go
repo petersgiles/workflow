@@ -6,11 +6,12 @@ import (
 	"log"
 	"time"
 
+	expr "local.com/internal/adapters/expr"
 	bluetooth "local.com/internal/adapters/nodes/bluetooth"
 	"local.com/internal/adapters/nodes/branch"
 	"local.com/internal/adapters/nodes/console"
-	finddevice "local.com/internal/adapters/nodes/finddevice"
 	"local.com/internal/adapters/nodes/httpclient"
+	lookup "local.com/internal/adapters/nodes/lookup"
 	"local.com/internal/adapters/nodes/loop"
 	"local.com/internal/adapters/nodes/noop"
 	runscript "local.com/internal/adapters/nodes/runscript"
@@ -33,12 +34,7 @@ func (s scriptRunnerAdapter) Exec(ctx context.Context, cmd string, args []string
 	return s.impl.Exec(ctx, cmd, args, env, 60*time.Second)
 }
 
-// simpleExprEval is a placeholder ExprEvaluator; replace with real evaluator when available.
-type simpleExprEval struct{}
-
-func (simpleExprEval) EvalBool(ctx context.Context, expr string, payload map[string]any) (bool, error) {
-	return false, nil
-}
+// expression evaluator lives in package flow (see internal/flow/simple_expr_eval.go)
 
 func main() {
 	flowPath := flag.String("flow", "flows/build.yaml", "path to flow yaml")
@@ -48,7 +44,7 @@ func main() {
 	deps := Deps{
 		Events:       flow.LogEvents{},
 		ScriptRunner: scriptRunnerAdapter{impl: scriptpkg.NewOSRunner()},
-		ExprEval:     simpleExprEval{},
+		ExprEval:     expr.SimpleEval{},
 		HTTPClient:   httpclient.NewNetClient(),
 	}
 
@@ -101,7 +97,18 @@ func main() {
 				expr = s
 			}
 		}
-		return branch.New(spec.ID, expr, deps.ExprEval, spec.Transitions), nil
+		// optional requires list
+		var requires []string
+		if v, ok := spec.Config["requires"]; ok {
+			if arr, ok2 := v.([]any); ok2 {
+				for _, e := range arr {
+					if sreq, ok3 := e.(string); ok3 {
+						requires = append(requires, sreq)
+					}
+				}
+			}
+		}
+		return branch.New(spec.ID, expr, deps.ExprEval, spec.Transitions, requires), nil
 	})
 
 	fr.Register("loop", func(spec flow.NodeSpec, d any) (flow.Node, error) {
@@ -139,14 +146,38 @@ func main() {
 		return webhook.New(spec.ID, url, deps.HTTPClient), nil
 	})
 
-	fr.Register("find_device", func(spec flow.NodeSpec, d any) (flow.Node, error) {
-		name := ""
-		if v, ok := spec.Config["name"]; ok {
+	fr.Register("lookup", func(spec flow.NodeSpec, d any) (flow.Node, error) {
+		src := "devices"
+		if v, ok := spec.Config["source"]; ok {
 			if s, ok := v.(string); ok {
-				name = s
+				src = s
 			}
 		}
-		return finddevice.New(spec.ID, name, spec.Transitions), nil
+		field := "name"
+		if v, ok := spec.Config["field"]; ok {
+			if s, ok := v.(string); ok {
+				field = s
+			}
+		}
+		pattern := ""
+		if v, ok := spec.Config["pattern"]; ok {
+			if s, ok := v.(string); ok {
+				pattern = s
+			}
+		}
+		match := "exact"
+		if v, ok := spec.Config["match"]; ok {
+			if s, ok := v.(string); ok {
+				match = s
+			}
+		}
+		mode := "first"
+		if v, ok := spec.Config["mode"]; ok {
+			if s, ok := v.(string); ok {
+				mode = s
+			}
+		}
+		return lookup.New(spec.ID, src, field, pattern, match, mode, spec.Transitions), nil
 	})
 
 	fr.Register("bluetooth", func(spec flow.NodeSpec, d any) (flow.Node, error) {

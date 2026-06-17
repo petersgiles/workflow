@@ -1,16 +1,26 @@
 id: branch-flow
-start_node: check
+start_node: onecheck
 nodes:
-  - id: check
+  - id: onecheck
     type: branch
     config:
-      expr: "payload.status == ok"
+      expr: "1 == 1"
     transitions:
-      true: success
-      false: fail
-  - id: success
+      true: onecheck_success
+      false: onecheck_fail
+  - id: onecheck_success
+    type: branch
+    config:
+      expr: "2 == 1"
+    transitions:
+      true: onecheck_success_success
+      false: onecheck_success_fail
+  - id: onecheck_success_success
     type: noop
     config: {}
-  - id: fail
+  - id: onecheck_success_fail
+    type: noop
+    config: {}
+  - id: onecheck_fail
     type: noop
     config: {}

@@ -16,12 +16,17 @@ func New(id string) *ConsoleNode { return &ConsoleNode{id: id} }
 func (c *ConsoleNode) ID() string { return c.id }
 
 func (c *ConsoleNode) Enter(ctx context.Context, in flow.Input) (flow.State, error) {
-	return flow.State{Data: map[string]any{}, Input: in}, nil
+	data := map[string]any{"payload": in.Payload}
+	return flow.State{Data: data, Input: in}, nil
 }
 
 func (c *ConsoleNode) Process(ctx context.Context, s flow.State) (flow.Result, error) {
-	log.Printf("console node=%s payload=%v", c.id, s.Input.Payload)
-	return flow.Result{Data: s.Input.Payload, Signal: flow.ControlSignal{}}, nil
+	payload := s.Input.Payload
+	if p, ok := s.Data["payload"].(map[string]any); ok {
+		payload = p
+	}
+	log.Printf("console node=%s payload=%v", c.id, payload)
+	return flow.Result{Data: payload, Signal: flow.ControlSignal{}}, nil
 }
 
 func (c *ConsoleNode) Exit(ctx context.Context, s flow.State) (flow.FinalResult, error) {

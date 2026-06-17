@@ -8,9 +8,12 @@ import (
 // It resolves node IDs to constructed Node instances.
 type RuntimeRegistry struct {
 	nodes map[string]Node
+	trans map[string]map[string]string
 }
 
-func NewRuntimeRegistry() *RuntimeRegistry { return &RuntimeRegistry{nodes: map[string]Node{}} }
+func NewRuntimeRegistry() *RuntimeRegistry {
+	return &RuntimeRegistry{nodes: map[string]Node{}, trans: map[string]map[string]string{}}
+}
 
 func (r *RuntimeRegistry) Resolve(id string) (Node, bool) {
 	n, ok := r.nodes[id]
@@ -18,6 +21,21 @@ func (r *RuntimeRegistry) Resolve(id string) (Node, bool) {
 }
 
 func (r *RuntimeRegistry) Add(id string, n Node) { r.nodes[id] = n }
+
+func (r *RuntimeRegistry) AddTransitions(id string, t map[string]string) {
+	if r.trans == nil {
+		r.trans = map[string]map[string]string{}
+	}
+	r.trans[id] = t
+}
+
+func (r *RuntimeRegistry) Transitions(id string) (map[string]string, bool) {
+	if r.trans == nil {
+		return nil, false
+	}
+	t, ok := r.trans[id]
+	return t, ok
+}
 
 // BuildRuntime builds node instances from a FlowSpec using a factory registry.
 // deps is an arbitrary struct that holds shared clients (ScriptRunner, HTTPClient, etc).
@@ -34,6 +52,8 @@ func BuildRuntime(spec *FlowSpec, fr *SimpleFactoryRegistry, deps any) (*Runtime
 			return nil, nil, fmt.Errorf("creating node %s: %w", ns.ID, err)
 		}
 		rt.Add(ns.ID, node)
+		// store transitions for orchestrator to consult at runtime
+		rt.AddTransitions(ns.ID, ns.Transitions)
 		order = append(order, ns.ID)
 	}
 

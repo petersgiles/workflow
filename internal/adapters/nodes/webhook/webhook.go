@@ -19,11 +19,16 @@ func New(id, url string, client flow.HTTPClient) *WebhookNode {
 func (n *WebhookNode) ID() string { return n.id }
 
 func (n *WebhookNode) Enter(ctx context.Context, in flow.Input) (flow.State, error) {
-	return flow.State{Data: map[string]any{}, Input: in}, nil
+	data := map[string]any{"payload": in.Payload}
+	return flow.State{Data: data, Input: in}, nil
 }
 
 func (n *WebhookNode) Process(ctx context.Context, s flow.State) (flow.Result, error) {
-	status, body, err := n.client.PostJSON(ctx, n.url, s.Input.Payload)
+	payload := s.Input.Payload
+	if p, ok := s.Data["payload"].(map[string]any); ok {
+		payload = p
+	}
+	status, body, err := n.client.PostJSON(ctx, n.url, payload)
 	data := map[string]any{"status": status, "response": string(body)}
 	sig := flow.ControlSignal{}
 	if err != nil || status >= 400 {

@@ -16,13 +16,18 @@ func New(id string) *NoopNode { return &NoopNode{id: id} }
 func (n *NoopNode) ID() string { return n.id }
 
 func (n *NoopNode) Enter(ctx context.Context, in flow.Input) (flow.State, error) {
-	return flow.State{Data: map[string]any{}, Input: in}, nil
+	data := map[string]any{"payload": in.Payload}
+	return flow.State{Data: data, Input: in}, nil
 }
 
 func (n *NoopNode) Process(ctx context.Context, s flow.State) (flow.Result, error) {
-	// echo input payload
+	// echo prepared payload
+	payload := s.Input.Payload
+	if p, ok := s.Data["payload"].(map[string]any); ok {
+		payload = p
+	}
 	out := map[string]any{}
-	for k, v := range s.Input.Payload {
+	for k, v := range payload {
 		out[k] = v
 	}
 	return flow.Result{Data: out, Signal: flow.ControlSignal{}}, nil

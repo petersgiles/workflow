@@ -21,11 +21,16 @@ func New(id, itemsKey string, subflow []string, orchRun func(ctx context.Context
 func (l *LoopNode) ID() string { return l.id }
 
 func (l *LoopNode) Enter(ctx context.Context, in flow.Input) (flow.State, error) {
-	return flow.State{Data: map[string]any{}, Input: in}, nil
+	data := map[string]any{"payload": in.Payload}
+	return flow.State{Data: data, Input: in}, nil
 }
 
 func (l *LoopNode) Process(ctx context.Context, s flow.State) (flow.Result, error) {
-	itemsI, ok := s.Input.Payload[l.itemsKey]
+	payload := s.Input.Payload
+	if p, ok := s.Data["payload"].(map[string]any); ok {
+		payload = p
+	}
+	itemsI, ok := payload[l.itemsKey]
 	if !ok {
 		return flow.Result{Data: map[string]any{"count": 0}}, nil
 	}

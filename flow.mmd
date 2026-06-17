@@ -1,6 +1,11 @@
 flowchart LR
   scan["scan"]
+  scan -- "success" --> find
+  scan -- "failure" --> stop
   find["find"]
+  find -- "success" --> show
+  find -- "failure" --> stop
   show["show"]
-  scan --> find
-  find --> show
+  show -- "success" --> stop
+  show -- "failure" --> stop
+  stop["stop"]

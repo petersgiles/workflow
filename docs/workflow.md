@@ -90,6 +90,19 @@ Below is concise documentation explaining the parts you have, how they map to a 
   - For simple linear runs, pass ordered nodeIDs to orchestrator.Run.
   - For graph runs, extend orchestrator to evaluate transitions (Result.Signal.Next or transition mapping in spec) and follow edges.
 
+  Node lifecycle (recommended contract)
+  ----------------------------------
+  - `Enter(ctx, in flow.Input) (flow.State, error)` — Validate and prepare data from the provided `in.Payload`. If required preconditions are not met, return an error. Do NOT read or rely on any orchestrator-internal state; `Enter` receives the data the orchestrator is supplying for this node.
+  - `Process(ctx, state flow.State) (flow.Result, error)` — Perform the node's work using only the prepared `state`. Return a `Result` containing the result payload (map[string]any) and optional `ControlSignal` (Next, Retry, Abort, Delay).
+  - `Exit(ctx, state flow.State) (flow.FinalResult, error)` — Cleanup and return any final data.
+
+  Orchestrator behavior
+  ---------------------
+  - The orchestrator passes the `Result.Data` payload from a node as the `Input.Payload` to the next node. This makes the data flow explicit: each node receives exactly the payload produced by its predecessor.
+  - The orchestrator does not inject implicit fallback state into `Enter` — if your node needs data from elsewhere, make it explicit in the flow (pass it as part of the payload or use a node to merge/transform data).
+
+  Keeping it simple avoids hidden dependencies and makes flows deterministic and easy to reason about.
+
 5) Extending orchestrator for graph/triggered flows
 - Keep the same Node lifecycle but change orchestrator.Run to:
   - Accept a start node ID (or trigger event) and an adjacency map.

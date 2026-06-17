@@ -11,19 +11,28 @@ type Registry interface {
 	Resolve(id string) (Node, bool)
 }
 
+// Extended registry contract: allow querying configured transitions for a node.
+type TransitionRegistry interface {
+	Registry
+	Transitions(id string) (map[string]string, bool)
+}
+
 // Orchestrator executes a linear flow defined as an ordered list of node IDs.
 // This is a minimal implementation; extend to support graphs/branches.
 type Orchestrator struct {
-	registry Registry
+	registry TransitionRegistry
 	events   Events
 }
 
-func NewOrchestrator(r Registry, e Events) *Orchestrator {
+func NewOrchestrator(r TransitionRegistry, e Events) *Orchestrator {
 	return &Orchestrator{registry: r, events: e}
 }
 
-// Run executes nodes in order. If a node's Result.Signal.Next is set,
-// orchestrator will jump to that node id (if present). Retry and Abort are supported.
+// (Orchestrator does not expose last result via context in the default
+// simple executor. It passes the result payload as the input to the next node.)
+
+// Run executes nodes in order. The orchestrator follows configured
+// `success`/`fail` transitions declared in the runtime. Retry and Abort are supported.
 func (o *Orchestrator) Run(ctx context.Context, nodeIDs []string, input Input) (FinalResult, error) {
 	var fr FinalResult
 	currentInput := input
@@ -46,16 +55,31 @@ func (o *Orchestrator) Run(ctx context.Context, nodeIDs []string, input Input) (
 
 		o.events.Info(ctx, id, map[string]any{"phase": "process"})
 		res, err := n.Process(ctx, state)
+
+		// Handle process-level errors as a fail path
 		if err != nil {
 			o.events.Error(ctx, id, err, nil)
-			// allow nodes to signal retry via Result.Signal.Retry instead of error
+			// consult configured transitions for this node
+			if tmap, ok := o.registry.Transitions(id); ok {
+				if nxt, ok2 := tmap["fail"]; ok2 {
+					j := indexOf(nodeIDs, nxt)
+					if j == -1 {
+						return fr, fmt.Errorf("fail transition %s not in flow", nxt)
+					}
+					// pass original input payload to failure handler
+					currentInput = state.Input
+					i = j
+					continue
+				}
+			}
+			// no fail transition configured: surface the error
 			return fr, err
 		}
 
 		// observe success
 		o.events.Success(ctx, id, map[string]any{"result": res.Data})
 
-		// handle control signals
+		// handle control signals (Abort/Retry)
 		if res.Signal.Abort {
 			o.events.Info(ctx, id, map[string]any{"action": "abort"})
 			return fr, ErrAborted
@@ -76,21 +100,23 @@ func (o *Orchestrator) Run(ctx context.Context, nodeIDs []string, input Input) (
 			// retry same node (do not advance i)
 			continue
 		}
-		// build next input from result (simple assignment; adapt as needed)
-		currentInput = Input{Payload: res.Data}
 
-		// jump if Next specified
-		if res.Signal.Next != "" {
-			// find index of Next in nodeIDs
-			j := indexOf(nodeIDs, res.Signal.Next)
-			if j == -1 {
-				return fr, fmt.Errorf("next node %s not in flow", res.Signal.Next)
+		// On success, consult configured transitions for this node
+		if tmap, ok := o.registry.Transitions(id); ok {
+			if nxt, ok2 := tmap["success"]; ok2 {
+				j := indexOf(nodeIDs, nxt)
+				if j == -1 {
+					return fr, fmt.Errorf("success transition %s not in flow", nxt)
+				}
+				currentInput = Input{Payload: res.Data}
+				i = j
+				continue
 			}
-			i = j
-			continue
 		}
-		// else proceed to next
-		i++
+
+		// No transition configured for this outcome: end the flow and return result
+		fr.Data = res.Data
+		return fr, nil
 	}
 
 	// finalize

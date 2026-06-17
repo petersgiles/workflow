@@ -2,53 +2,68 @@ package branch
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"local.com/internal/flow"
 )
 
 type BranchNode struct {
-	id    string
-	expr  string
-	ev    flow.ExprEvaluator
-	trans map[string]string // optional transitions mapping, e.g., "true": "nextID", "false":"altID"
+	id       string
+	expr     string
+	ev       flow.ExprEvaluator
+	trans    map[string]string // optional transitions mapping, e.g., "true": "nextID", "false":"altID"
+	requires []string
 }
 
-func New(id string, expr string, ev flow.ExprEvaluator, trans map[string]string) *BranchNode {
-	return &BranchNode{id: id, expr: expr, ev: ev, trans: trans}
+func New(id string, expr string, ev flow.ExprEvaluator, trans map[string]string, requires []string) *BranchNode {
+	return &BranchNode{id: id, expr: expr, ev: ev, trans: trans, requires: requires}
 }
 
 func (b *BranchNode) ID() string { return b.id }
 
 func (b *BranchNode) Enter(ctx context.Context, in flow.Input) (flow.State, error) {
-	return flow.State{Data: map[string]any{}, Input: in}, nil
+	// validate required preconditions if any
+	for _, req := range b.requires {
+		// req is a dot-separated path into payload, like "status" or "user.id"
+		parts := strings.Split(req, ".")
+		var cur any = in.Payload
+		found := true
+		for _, p := range parts {
+			if m, ok := cur.(map[string]any); ok {
+				if v, ok2 := m[p]; ok2 {
+					cur = v
+					continue
+				}
+			}
+			found = false
+			break
+		}
+		if !found {
+			return flow.State{}, fmt.Errorf("branch: missing required payload key '%s'", req)
+		}
+	}
+	data := map[string]any{"payload": in.Payload}
+	return flow.State{Data: data, Input: in}, nil
 }
 
 func (b *BranchNode) Process(ctx context.Context, s flow.State) (flow.Result, error) {
-	ok, err := b.ev.EvalBool(ctx, b.expr, s.Input.Payload)
+	payload := s.Input.Payload
+	if p, okp := s.Data["payload"].(map[string]any); okp {
+		payload = p
+	}
+	ok, err := b.ev.EvalBool(ctx, b.expr, payload)
 	if err != nil {
 		return flow.Result{}, err
 	}
-	sig := flow.ControlSignal{}
-	// pick next based on transitions if provided
-	if b.trans != nil {
-		if ok {
-			if nxt, found := b.trans["true"]; found {
-				sig.Next = nxt
-			}
-		} else {
-			if nxt, found := b.trans["false"]; found {
-				sig.Next = nxt
-			}
-		}
-	} else {
-		// default: encode result into payload for orchestrator to handle transitions
-		if ok {
-			s.Data["branch"] = "true"
-		} else {
-			s.Data["branch"] = "false"
-		}
+
+	if ok {
+		// success: return result and let orchestrator follow `success` transition if configured
+		return flow.Result{Data: s.Data, Signal: flow.ControlSignal{}}, nil
 	}
-	return flow.Result{Data: s.Data, Signal: sig}, nil
+
+	// failure: return error so orchestrator follows the `fail` transition
+	return flow.Result{}, fmt.Errorf("branch: expression evaluated to false")
 }
 
 func (b *BranchNode) Exit(ctx context.Context, s flow.State) (flow.FinalResult, error) {

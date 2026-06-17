@@ -4,11 +4,27 @@ nodes:
   - id: scan
     type: bluetooth
     config:
-      timeout_seconds: 8
+      timeout_seconds: 15
+    transitions:
+      success: find
+      failure: stop
   - id: find
-    type: find_device
+    type: lookup
     config:
-      name: "BLE Harness"
+      source: devices
+      field: name
+      pattern: "BLE Harness"
+      match: exact
+      mode: first
+    transitions:
+      success: show
+      failure: stop
   - id: show
     type: console
+    config: {}
+    transitions:
+      success: stop
+      failure: stop
+  - id: stop
+    type: noop
     config: {}

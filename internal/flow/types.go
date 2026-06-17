@@ -23,7 +23,7 @@ type State struct {
 }
 
 type ControlSignal struct {
-	Next  string // next node ID (empty = implicit)
+	// No legacy `Next` field: transitions are configured in the spec
 	Retry bool
 	Abort bool
 	Delay time.Duration

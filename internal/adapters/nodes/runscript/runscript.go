@@ -21,10 +21,12 @@ func New(id string, cmd string, args []string, env map[string]string, r flow.Scr
 func (n *RunScriptNode) ID() string { return n.id }
 
 func (n *RunScriptNode) Enter(ctx context.Context, in flow.Input) (flow.State, error) {
-	return flow.State{Data: map[string]any{}, Input: in}, nil
+	data := map[string]any{"payload": in.Payload}
+	return flow.State{Data: data, Input: in}, nil
 }
 
 func (n *RunScriptNode) Process(ctx context.Context, s flow.State) (flow.Result, error) {
+	// use prepared payload if needed by runner in future
 	stdout, stderr, exit, err := n.runner.Exec(ctx, n.cmd, n.args, n.env)
 	data := map[string]any{"stdout": stdout, "stderr": stderr, "exit": exit}
 	sig := flow.ControlSignal{}

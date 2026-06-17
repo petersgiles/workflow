@@ -20,7 +20,8 @@ func New(id string, scanner flow.BluetoothScanner, timeout time.Duration) *Bluet
 func (b *BluetoothNode) ID() string { return b.id }
 
 func (b *BluetoothNode) Enter(ctx context.Context, in flow.Input) (flow.State, error) {
-	return flow.State{Data: map[string]any{}, Input: in}, nil
+	data := map[string]any{"payload": in.Payload}
+	return flow.State{Data: data, Input: in}, nil
 }
 
 func (b *BluetoothNode) Process(ctx context.Context, s flow.State) (flow.Result, error) {
